@@ -16,15 +16,21 @@
 
 package com.example.android.guesstheword.screens.game
 
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.core.content.getSystemService
 import androidx.databinding.DataBindingUtil
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProviders
-import androidx.navigation.fragment.NavHostFragment
+import androidx.navigation.fragment.NavHostFragment.findNavController
 import com.example.android.guesstheword.R
 import com.example.android.guesstheword.databinding.GameFragmentBinding
 
@@ -51,18 +57,51 @@ class GameFragment : Fragment() {
         Log.i("GameFragment", "Called ViewModelProviders.of!") // only this called during rotation
         viewModel = ViewModelProviders.of(this).get(GameViewModel::class.java)
 
-        binding.correctButton.setOnClickListener {
-            viewModel.onCorrect()
-            updateScoreText()
-            updateWordText()
-        }
-        binding.skipButton.setOnClickListener {
-            viewModel.onSkip()
-            updateScoreText()
-            updateWordText()
-        }
-        updateScoreText()
-        updateWordText()
+        binding.gameViewModel = viewModel
+
+        // Specify the current activity as the lifecycle owner of the binding. This is used so that
+        // the binding can observe LiveData updates
+        binding.lifecycleOwner = this //Add LiveData Data Binding
+
+        // this moved to game_fragment.xml
+//        binding.correctButton.setOnClickListener {
+//            viewModel.onCorrect()
+//        }
+//
+//        binding.skipButton.setOnClickListener {
+//            viewModel.onSkip()
+//        }
+
+        // word and score observes moved to .xml by "android:text="@{@string/quote_format(gameViewModel.word)}" + binding.lifecycleOwner = this
+//        viewModel.word.observe(this, Observer { newWord ->
+//            // for LiveData
+//            binding.wordText.text = newWord
+//        })
+//        viewModel.score.observe(this, Observer { newScore ->
+//            // for LiveData
+//            binding.scoreText.text = newScore.toString()
+//        })
+
+        // moved to .xml + android:text="@{gameViewModel.currentTimeString}"
+//        viewModel.currentTime.observe(this, Observer { newTime ->
+//            binding.timerText.text = DateUtils.formatElapsedTime(newTime)
+//        })
+
+        viewModel.eventGameFinish.observe(this, Observer { hasFinished ->
+            if (hasFinished) {
+                gameFinished()
+                viewModel.onGameFinishCompleted()
+            }
+        })
+
+        // Buzzes when triggered with different buzz events
+        viewModel.eventBuzz.observe(this, Observer { buzzType ->
+            if (buzzType != GameViewModel.BuzzType.NO_BUZZ) {
+                buzz(buzzType.pattern)
+                viewModel.onBuzzComplete()
+            }
+        })
+
         return binding.root
 
     }
@@ -71,18 +110,21 @@ class GameFragment : Fragment() {
      * Called when the game is finished
      */
     private fun gameFinished() {
-        val action = GameFragmentDirections.actionGameToScore(viewModel.score)
-        NavHostFragment.findNavController(this).navigate(action)
+        Toast.makeText(this.activity, "Game has finished", Toast.LENGTH_SHORT).show()
+        val action = GameFragmentDirections.actionGameToScore(viewModel.score.value ?: 0)
+        findNavController(this).navigate(action)
     }
 
-    /** Methods for updating the UI **/
+    private fun buzz(pattern: LongArray) {
+        val buzzer = activity?.getSystemService<Vibrator>()
 
-    private fun updateWordText() {
-        binding.wordText.text = viewModel.word
-
-    }
-
-    private fun updateScoreText() {
-        binding.scoreText.text = viewModel.score.toString()
+        buzzer?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                buzzer.vibrate(VibrationEffect.createWaveform(pattern, -1))
+            } else {
+                //deprecated in API 26
+                buzzer.vibrate(pattern, -1)
+            }
+        }
     }
 }
